@@ -408,7 +408,7 @@ class FPDF(object):
             unifilename = os.path.splitext(ttffilename)[0] + '.pkl'
             name = ''
             if os.path.exists(unifilename):
-                fh = open(unifilename)
+                fh = open(unifilename, "rb")
                 try:
                     font_dict = pickle.load(fh)
                 finally:
@@ -443,7 +443,7 @@ class FPDF(object):
                     'cw': ttf.charWidths,
                     }
                 try:
-                    fh = open(unifilename, "w")
+                    fh = open(unifilename, "wb")
                     pickle.dump(font_dict, fh)
                     fh.close()
                 except IOError as e:
@@ -466,7 +466,7 @@ class FPDF(object):
                                         'type': "TTF", 'ttffile': ttffilename}
             self.font_files[fname] = {'type': "TTF"}
         else:
-            fontfile = open(fname)
+            fontfile = open(fname, "rb")
             try:
                 font_dict = pickle.load(fontfile)
             finally:
@@ -1301,7 +1301,7 @@ class FPDF(object):
     def _putTTfontwidths(self, font, maxUni):
         cw127fname = os.path.splitext(font['unifilename'])[0] + '.cw127.pkl'
         if (os.path.exists(cw127fname)):
-            fh = open(cw127fname);
+            fh = open(cw127fname, "rb");
             try:
                 font_dict = pickle.load(fh)
             finally:
