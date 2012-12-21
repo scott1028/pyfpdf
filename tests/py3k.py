@@ -7,8 +7,8 @@ import sys
 from fpdf import FPDF
     
 pdf = FPDF()
-# compression is not yet supported in py3k version
-pdf.compress = False
+# compression is also supported in py3k version
+pdf.compress = True
 pdf.add_page()
 # unicode is not yet supported in py3k version, use windows-1252 standards font
 pdf.set_font('Arial','',14)  

@@ -41,6 +41,14 @@ FPDF_FONT_DIR = os.path.join(os.path.dirname(__file__),'font')
 SYSTEM_TTFONTS = None
 
 PY3K = sys.version_info >= (3, 0)
+if PY3K:
+    # convert unicode string to bytes
+    def tobytes(value):
+        return value.encode("latin1")
+else:
+    def tobytes(value):
+        return value
+        
 
 def set_global(var, val):
     globals()[var] = val
@@ -56,7 +64,7 @@ class FPDF(object):
         self.offsets={}                 # array of object offsets
         self.page=0                     # current page number
         self.n=2                        # current object number
-        self.buffer=''                  # buffer holding in-memory PDF
+        self.buffer=tobytes('')         # buffer holding in-memory PDF
         self.pages={}                   # array containing pages
         self.orientation_changes={}     # array indicating orientation changes
         self.state=0                    # current document state
@@ -985,11 +993,7 @@ class FPDF(object):
             f=open(name,'wb')
             if(not f):
                 self.error('Unable to create output file: '+name)
-            if PY3K:
-                # TODO: proper unicode support
-                f.write(self.buffer.encode("latin1"))
-            else:
-                f.write(self.buffer)
+            f.write(self.buffer)
             f.close()
         elif dest=='S':
             #Return as a string
@@ -1555,7 +1559,7 @@ class FPDF(object):
 
     def _beginpage(self, orientation):
         self.page+=1
-        self.pages[self.page]=''
+        self.pages[self.page]=tobytes('')
         self.state=2
         self.x=self.l_margin
         self.y=self.t_margin
@@ -1773,15 +1777,18 @@ class FPDF(object):
 
     def _putstream(self, s):
         self._out('stream')
-        self._out(s)
+        self._out(s, raw = True)
         self._out('endstream')
 
-    def _out(self, s):
+    def _out(self, s, raw = False):
         #Add a line to the document
         if(self.state==2):
-            self.pages[self.page]+=s+"\n"
+            self.pages[self.page]+=tobytes(s+"\n")
         else:
-            self.buffer+=str(s)+"\n"
+            if raw:
+                self.buffer+=s+tobytes("\n")
+            else:
+                self.buffer+=tobytes(str(s)+"\n")
 
     def interleaved2of5(self, txt, x, y, w=1.0, h=10.0):
         "Barcode I2of5 (numeric), adds a 0 if odd lenght"
