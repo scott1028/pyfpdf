@@ -1049,8 +1049,9 @@ class FPDF(object):
             for n in xrange(1, nb+1):
                 self.pages[n] = self.pages[n].replace(alias, r)
             # Now repeat for no pages in non-subset fonts
-            for n in xrange(1,nb+1):
-                self.pages[n]=self.pages[n].replace(self.str_alias_nb_pages,tobytes(str(nb)))
+            for n in xrange(1, nb + 1):
+                self.pages[n]=self.pages[n].replace(\
+                    tobytes(self.str_alias_nb_pages), tobytes(str(nb)))
         if(self.def_orientation=='P'):
             w_pt=self.fw_pt
             h_pt=self.fh_pt
