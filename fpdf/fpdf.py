@@ -45,9 +45,23 @@ if PY3K:
     # convert unicode string to bytes
     def tobytes(value):
         return value.encode("latin1")
+    # reverse
+    def frombytes(value):
+        return value.decode("latin1")
+    # utf16be conversion
+    def StrToUTF16BE(instr, setbom=True):
+        #if not isinstance(instr, str):
+        #    instr = instr.decode('UTF-8')
+        outstr = instr.encode('UTF-16BE')
+        if (setbom):
+            outstr = [0xFE, 0xFF] + outstr
+        return outstr        
 else:
     def tobytes(value):
         return value
+    def frombytes(value):
+        return value
+    StrToUTF16BE = UTF8ToUTF16BE
         
 
 def set_global(var, val):
@@ -583,11 +597,11 @@ class FPDF(object):
         "Output a string"
         txt = self.normalize_text(txt)
         if (self.unifontsubset):
-            txt2 = self._escape(UTF8ToUTF16BE(txt, False))
+            txt2 = frombytes(self._escape(StrToUTF16BE(txt, False)))
             for uni in UTF8StringToArray(txt):
                 self.current_font['subset'].append(uni)
         else:
-            txt2 = self._escape(txt)
+            txt2 = self._escapestr(txt)
         s=sprintf('BT %.2f %.2f Td (%s) Tj ET',x*self.k,(self.h-y)*self.k, txt2)
         if(self.underline and txt!=''):
             s+=' '+self._dounderline(x,y,txt)
@@ -669,13 +683,13 @@ class FPDF(object):
             if (self.ws and self.unifontsubset):
                 for uni in UTF8StringToArray(txt):
                     self.current_font['subset'].append(uni)
-                space = self._escape(UTF8ToUTF16BE(' ', False))
+                space = frombytes(self._escape(StrToUTF16BE(' ', False)))
                 s += sprintf('BT 0 Tw %.2F %.2F Td [',(self.x + dx) * k,(self.h - (self.y + 0.5*h+ 0.3 * self.font_size)) * k)
                 t = txt.split(' ')
                 numt = len(t)
                 for i in range(numt):
                     tx = t[i]
-                    tx = '(' + self._escape(UTF8ToUTF16BE(tx, False)) + ')'
+                    tx = '(' + frombytes(self._escape(StrToUTF16BE(tx, False))) + ')'
                     s += sprintf('%s ', tx);
                     if ((i+1)<numt):
                         adj = -(self.ws * self.k) * 1000 / self.font_size_pt
@@ -684,11 +698,11 @@ class FPDF(object):
                 s += ' ET'
             else:
                 if (self.unifontsubset):
-                    txt2 = self._escape(UTF8ToUTF16BE(txt, False))
+                    txt2 = frombytes(self._escape(StrToUTF16BE(txt, False)))
                     for uni in UTF8StringToArray(txt):
                         self.current_font['subset'].append(uni)
                 else:
-                    txt2 = txt.replace('\\','\\\\').replace(')','\\)').replace('(','\\(') 
+                    txt2 = self._escapestr(txt)
                 s += sprintf('BT %.2f %.2f Td (%s) Tj ET',(self.x+dx)*k,(self.h-(self.y+.5*h+.3*self.font_size))*k,txt2)
             
             if(self.underline):
@@ -1006,7 +1020,8 @@ class FPDF(object):
         "Check that text input is in the correct format/encoding"
         # - for TTF unicode fonts: unicode object (utf8 encoding)
         # - for built-in fonts: string instances (latin 1 encoding)
-        if self.unifontsubset and isinstance(txt, str):
+        # for py3 output is unicode string, utf8 otherwise
+        if self.unifontsubset and isinstance(txt, str) and not PY3K:
             txt = txt.decode('utf8')
         elif not self.unifontsubset and isinstance(txt, unicode) and not PY3K:
             txt = txt.encode('latin1')
@@ -1029,13 +1044,13 @@ class FPDF(object):
         nb=self.page
         if hasattr(self,'str_alias_nb_pages'):
             # Replace number of pages in fonts using subsets (unicode)
-            alias = UTF8ToUTF16BE(self.str_alias_nb_pages, False);
-            r = UTF8ToUTF16BE(str(nb), False)
+            alias = StrToUTF16BE(self.str_alias_nb_pages, False);
+            r = StrToUTF16BE(str(nb), False)
             for n in xrange(1, nb+1):
                 self.pages[n] = self.pages[n].replace(alias, r)
             # Now repeat for no pages in non-subset fonts
             for n in xrange(1,nb+1):
-                self.pages[n]=self.pages[n].replace(self.str_alias_nb_pages,str(nb))
+                self.pages[n]=self.pages[n].replace(self.str_alias_nb_pages,tobytes(str(nb)))
         if(self.def_orientation=='P'):
             w_pt=self.fw_pt
             h_pt=self.fh_pt
@@ -1246,7 +1261,7 @@ class FPDF(object):
                         "end\n" \
                         "end"
                 self._out('<</Length ' + str(len(toUni)) + '>>')
-                self._putstream(toUni)
+                self._putstream(tobytes(toUni))
                 self._out('endobj')
 
                 # CIDSystemInfo dictionary
@@ -1278,7 +1293,7 @@ class FPDF(object):
                 for cc, glyph in codeToGlyph.items():
                     cidtogidmap[cc*2] = chr(glyph >> 8)
                     cidtogidmap[cc*2 + 1] = chr(glyph & 0xFF)
-                cidtogidmap = zlib.compress(''.join(cidtogidmap));
+                cidtogidmap = zlib.compress(tobytes(''.join(cidtogidmap)))
                 self._newobj()
                 self._out('<</Length ' + str(len(cidtogidmap)) + '')
                 self._out('/Filter /FlateDecode')
@@ -1769,11 +1784,19 @@ class FPDF(object):
 
     def _textstring(self, s):
         #Format a text string
-        return '('+self._escape(s)+')'
+        return '(' + self._escapestr(s) + ')'
 
     def _escape(self, s):
-        #Add \ before \, ( and )
-        return s.replace('\\','\\\\').replace(')','\\)').replace('(','\\(')
+        # Add \ before \, ( and )
+        return tobytes(frombytes(s).replace('\\', '\\\\')\
+                .replace(')', '\\)')\
+                .replace('(', '\\('))
+
+    def _escapestr(self, s):
+        # Add \ before \, ( and )
+        return s.replace('\\', '\\\\')\
+                .replace(')', '\\)')\
+                .replace('(', '\\(')
 
     def _putstream(self, s):
         self._out('stream')
