@@ -74,7 +74,7 @@ def calcChecksum(data):
     for i in range(0, len(data), 4): 
         hi += unpack(">H", data[i:i + 2])[0]
         lo += unpack(">H", data[i + 2:i + 4])[0]
-        hi += lo << 16
+        hi += lo >> 16
         lo = lo & 0xFFFF
         hi = hi & 0xFFFF
     return (hi, lo)
