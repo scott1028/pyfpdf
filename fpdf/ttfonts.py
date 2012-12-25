@@ -29,12 +29,21 @@ if PY3K:
     # reverse
     def frombytes(value):
         return value.decode("latin1")
+    # round ttf param
+    import math
+    def ttfround(value):
+        floor = math.floor(value)
+        if value - floor >= 0.5:
+            return int(math.ceil(value))
+        return int(floor)
 else:
     def tobytes(value):
         return value
     def frombytes(value):
         return value
-
+    def ttfround(value):
+        return int(round(value))
+    
 # Define the value used in the "head" table of a created TTF file
 # 0x74727565 "true" for Mac
 # 0x00010000 for Windows
@@ -865,7 +874,7 @@ class TTFontFile:
                 
                 for char in glyphToChar[glyph]: 
                     if (char != 0 and char != 65535): 
-                        w = int(round(scale*aw))
+                        w = ttfround(scale * aw)
                         if (w == 0):  w = 65535 
                         if (char < 196608): 
                             self.charWidths[char] = w 
@@ -880,7 +889,7 @@ class TTFontFile:
             if (glyph in glyphToChar): 
                 for char in glyphToChar[glyph]: 
                     if (char != 0 and char != 65535): 
-                        w = int(round(scale*aw))
+                        w = ttfround(scale * aw)
                         if (w == 0):  w = 65535 
                         if (char < 196608):
                             self.charWidths[char] = w
