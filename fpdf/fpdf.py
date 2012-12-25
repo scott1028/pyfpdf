@@ -30,7 +30,7 @@ except ImportError:
     Image = None
 
 
-from ttfonts import TTFontFile
+from ttfonts import TTFontFile, ttfround
 from fonts import fpdf_charwidths
 from php import substr, sprintf, print_r, UTF8ToUTF16BE, UTF8StringToArray
 
@@ -439,18 +439,18 @@ class FPDF(object):
                 ttf = TTFontFile()
                 ttf.getMetrics(ttffilename)
                 desc = {
-                    'Ascent': int(round(ttf.ascent, 0)),
-                    'Descent': int(round(ttf.descent, 0)),
-                    'CapHeight': int(round(ttf.capHeight, 0)),
+                    'Ascent': ttfround(ttf.ascent),
+                    'Descent': ttfround(ttf.descent),
+                    'CapHeight': ttfround(ttf.capHeight),
                     'Flags': ttf.flags,
                     'FontBBox': "[%s %s %s %s]" % (
-                        int(round(ttf.bbox[0], 0)),
-                        int(round(ttf.bbox[1], 0)),
-                        int(round(ttf.bbox[2], 0)),
-                        int(round(ttf.bbox[3], 0))),
+                        ttfround(ttf.bbox[0]),
+                        ttfround(ttf.bbox[1]),
+                        ttfround(ttf.bbox[2]),
+                        ttfround(ttf.bbox[3])),
                     'ItalicAngle': int(ttf.italicAngle),
-                    'StemV': int(round(ttf.stemV, 0)),
-                    'MissingWidth': int(round(ttf.defaultWidth, 0)),
+                    'StemV': ttfround(ttf.stemV),
+                    'MissingWidth': ttfround(ttf.defaultWidth),
                     }
                 # Generate metrics .pkl file
                 font_dict = {
