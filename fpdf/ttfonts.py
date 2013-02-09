@@ -17,11 +17,33 @@
 #******************************************************************************
 
 from struct import pack, unpack, unpack_from
-import re
+import re, sys
 import warnings
 from php import die, substr, str_repeat, str_pad, strlen, count
 
-
+PY3K = sys.version_info >= (3, 0)
+if PY3K:
+    # convert unicode string to bytes
+    def tobytes(value):
+        return value.encode("latin1")
+    # reverse
+    def frombytes(value):
+        return value.decode("latin1")
+    # round ttf param
+    import math
+    def ttfround(value):
+        floor = math.floor(value)
+        if value - floor >= 0.5:
+            return int(math.ceil(value))
+        return int(floor)
+else:
+    def tobytes(value):
+        return value
+    def frombytes(value):
+        return value
+    def ttfround(value):
+        return int(round(value))
+    
 # Define the value used in the "head" table of a created TTF file
 # 0x74727565 "true" for Mac
 # 0x00010000 for Windows
@@ -55,12 +77,12 @@ def sub32(x, y):
 
 def calcChecksum(data): 
     if (strlen(data) % 4):
-        data += str_repeat("\0", (4-(len(data) % 4)))
+        data += tobytes("\0" * (4 - (len(data) % 4)))
     hi=0x0000
     lo=0x0000
     for i in range(0, len(data), 4): 
-        hi += (ord(data[i])<<8) + ord(data[i+1])
-        lo += (ord(data[i+2])<<8) + ord(data[i+3])
+        hi += unpack(">H", data[i:i + 2])[0]
+        lo += unpack(">H", data[i + 2:i + 4])[0]
         hi += lo >> 16
         lo = lo & 0xFFFF
         hi = hi & 0xFFFF
@@ -90,7 +112,7 @@ class TTFontFile:
         if (version==0x74746366):
             die("ERROR - TrueType Fonts Collections not supported")
         if (version not in (0x00010000,0x74727565)):
-            die("Not a TrueType font: version=" + version)
+            die("Not a TrueType font: version=" + str(version))
         self.readTableDirectory()
         self.extractInfo()
         self.fh.close()
@@ -130,50 +152,38 @@ class TTFontFile:
 
     def read_tag(self):
         self._pos += 4
-        return self.fh.read(4)
+        return frombytes(self.fh.read(4))
 
     def read_short(self): 
         self._pos += 2
         s = self.fh.read(2)
-        a = (ord(s[0])<<8) + ord(s[1])
-        if (a & (1 << 15) ):
-            a = (a - (1 << 16)) 
-        return a
+        return unpack(">h", s)[0] 
     
     def unpack_short(self, s):
-        a = (ord(s[0])<<8) + ord(s[1])
-        if (a & (1 << 15) ):
-            a = (a - (1 << 16))     
-        return a
+        return unpack(">h", s)[0]
     
     def read_ushort(self):
         self._pos += 2
         s = self.fh.read(2)
-        return (ord(s[0])<<8) + ord(s[1])
+        return unpack(">H", s)[0]
 
     def read_ulong(self): 
         self._pos += 4
         s = self.fh.read(4)
-        # if large uInt32 as an integer, PHP converts it to -ve
-        return (ord(s[0])*16777216) + (ord(s[1])<<16) + (ord(s[2])<<8) + ord(s[3]) #     16777216  = 1<<24
+        return unpack(">I", s)[0]
 
     def get_ushort(self, pos): 
         self.fh.seek(pos)
         s = self.fh.read(2)
-        return (ord(s[0])<<8) + ord(s[1])
+        return unpack(">H", s)[0]
 
     def get_ulong(self, pos):
         self.fh.seek(pos)
         s = self.fh.read(4)
-        # iF large uInt32 as an integer, PHP converts it to -ve
-        return (ord(s[0])*16777216) + (ord(s[1])<<16) + (ord(s[2])<<8) + ord(s[3]) #     16777216  = 1<<24    
+        return unpack(">I", s)[0]    
 
     def pack_short(self, val):
-        if (val<0):
-            val = abs(val)
-            val = ~val
-            val += 1
-        return pack(">H",val) 
+        return pack(">h",val) 
     
     def splice(self, stream, offset, value):
         return substr(stream,0,offset) + value + substr(stream,offset+strlen(value))
@@ -183,11 +193,7 @@ class TTFontFile:
         return self.splice(stream, offset, up)    
 
     def _set_short(self, stream, offset, val):
-        if (val<0):
-            val = abs(val)
-            val = ~val
-            val += 1
-        up = pack(">H",val) 
+        up = pack(">h",val) 
         return self.splice(stream, offset, up)
 
     def get_chunk(self, pos, length): 
@@ -204,7 +210,7 @@ class TTFontFile:
 
     def add(self, tag, data):
         if (tag == 'head') :
-            data = self.splice(data, 8, "\0\0\0\0")        
+            data = self.splice(data, 8, tobytes("\0\0\0\0"))        
         self.otables[tag] = data
 
 ############################################/
@@ -254,9 +260,11 @@ class TTFontFile:
             elif (platformId == 1 and encodingId == 0 and languageId == 0):  # Macintosh, Roman, English, PS Name
                 opos = self._pos
                 N = self.get_chunk(string_data_offset + offset, length)
+                N = frombytes(N)
                 self._pos = opos
                 self.seek(opos)
             
+
             if (N and names[nameId]==''):
                 names[nameId] = N
                 nameCount -= 1
@@ -584,7 +592,7 @@ class TTFontFile:
 
         # post - PostScript
         opost = self.get_table('post')
-        post = "\x00\x03\x00\x00" + substr(opost,4,12) + "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+        post = tobytes("\x00\x03\x00\x00") + substr(opost,4,12) + tobytes("\x00" * 16)
         self.add('post', post)
 
         # Sort CID2GID map into segments of contiguous codes
@@ -658,7 +666,7 @@ class TTFontFile:
             cmap.extend(glidx)
         
         cmap.append(0)    # Mapping for last character
-        cmapstr = ''
+        cmapstr = tobytes('')
         for cm in cmap:
             if cm >= 0:
                 cmapstr += pack(">H", cm) 
@@ -676,10 +684,10 @@ class TTFontFile:
             glyphData = self.get_table('glyf')
 
         offsets = []
-        glyf = ''
+        glyf = tobytes('')
         pos = 0
 
-        hmtxstr = ''
+        hmtxstr = tobytes('')
         xMinT = 0
         yMinT = 0
         xMaxT = 0
@@ -715,7 +723,7 @@ class TTFontFile:
                 if (glyphLen > 0):
                     data = self.get_chunk(glyfOffset+glyphPos,glyphLen)
                 else:
-                    data = ''
+                    data = tobytes('')
             
             if (glyphLen > 0):
                 up = unpack(">H", substr(data,0,2))[0]
@@ -753,7 +761,7 @@ class TTFontFile:
             pos += glyphLen
             if (pos % 4 != 0): 
                 padding = 4 - (pos % 4)
-                glyf += str_repeat("\0",padding)
+                glyf += tobytes("\0" * padding)
                 pos += padding
 
         offsets.append(pos)
@@ -763,15 +771,15 @@ class TTFontFile:
         self.add('hmtx', hmtxstr)
 
         # loca - Index to location
-        locastr = ''
+        locastr = tobytes('')
         if (((pos + 1) >> 1) > 0xFFFF): 
             indexToLocFormat = 1        # long format
             for offset in offsets:
-                locastr += pack(">L",offset) 
+                locastr += pack(">L", offset) 
         else:
             indexToLocFormat = 0        # short format
             for offset in offsets:  
-                locastr += pack(">H",(offset/2)) 
+                locastr += pack(">H", (offset // 2)) 
         
         self.add('loca', locastr)
 
@@ -797,7 +805,7 @@ class TTFontFile:
         self.fh.close()
 
         # Put the TTF file together
-        stm = self.endTTFile('')
+        stm = self.endTTFile(tobytes(''))
         return stm 
     
 
@@ -868,7 +876,7 @@ class TTFontFile:
         nCharWidths = 0
         if ((numberOfHMetrics*4) < self.maxStrLenRead): 
             data = self.get_chunk(start,(numberOfHMetrics*4))
-            arr = unpack(">" + "H" * (len(data)/2), data)
+            arr = unpack(">" + "H" * (len(data) // 2), data)
         else:
             self.seek(start) 
         for glyph in range(numberOfHMetrics): 
@@ -888,7 +896,7 @@ class TTFontFile:
                 
                 for char in glyphToChar[glyph]: 
                     if (char != 0 and char != 65535): 
-                        w = int(round(scale*aw))
+                        w = ttfround(scale * aw)
                         if (w == 0):  w = 65535 
                         if (char < 196608): 
                             self.charWidths[char] = w 
@@ -896,14 +904,14 @@ class TTFontFile:
             
         
         data = self.get_chunk((start+numberOfHMetrics*4),(numGlyphs*2))
-        arr = unpack(">" + "H" * (len(data)/2), data)
+        arr = unpack(">" + "H" * (len(data) // 2), data)
         diff = numGlyphs-numberOfHMetrics
         for pos in range(diff): 
             glyph = pos + numberOfHMetrics
             if (glyph in glyphToChar): 
                 for char in glyphToChar[glyph]: 
                     if (char != 0 and char != 65535): 
-                        w = int(round(scale*aw))
+                        w = ttfround(scale * aw)
                         if (w == 0):  w = 65535 
                         if (char < 196608):
                             self.charWidths[char] = w
@@ -933,12 +941,12 @@ class TTFontFile:
         self.glyphPos = []
         if (indexToLocFormat == 0):
             data = self.get_chunk(start,(numGlyphs*2)+2)
-            arr = unpack(">" + "H" * (len(data)/2), data)
+            arr = unpack(">" + "H" * (len(data) // 2), data)
             for n in range(numGlyphs): 
                 self.glyphPos.append((arr[n] * 2))  # n+1 !?
         elif (indexToLocFormat == 1):
             data = self.get_chunk(start,(numGlyphs*4)+4)
-            arr = unpack(">" + "L" * (len(data)/4), data)
+            arr = unpack(">" + "L" * (len(data) // 4), data)
             for n in range(numGlyphs):
                 self.glyphPos.append((arr[n]))  # n+1 !?
         else:
@@ -952,7 +960,7 @@ class TTFontFile:
         limit = unicode_cmap_offset + length
         self.skip(2)
 
-        segCount = self.read_ushort() / 2
+        segCount = self.read_ushort() // 2
         self.skip(6)
         endCount = []
         for i in range(segCount):
@@ -1020,7 +1028,7 @@ class TTFontFile:
 
     # Put the TTF file together
     def endTTFile(self, stm): 
-        stm = ''
+        stm = tobytes('')
         numTables = count(self.otables)
         searchRange = 1
         entrySelector = 0
@@ -1035,7 +1043,7 @@ class TTFontFile:
         if (_TTF_MAC_HEADER): 
             stm += (pack(">LHHHH", 0x74727565, numTables, searchRange, entrySelector, rangeShift))    # Mac
         else:
-            stm += (pack(">LHHHH", 0x00010000 , numTables, searchRange, entrySelector, rangeShift))    # Windows
+            stm += (pack(">LHHHH", 0x00010000, numTables, searchRange, entrySelector, rangeShift))    # Windows
 
         
         # Table directory
@@ -1046,7 +1054,7 @@ class TTFontFile:
         for tag, data in sorted_tables:
             if (tag == 'head'):
                 head_start = offset 
-            stm += tag
+            stm += tobytes(tag)
             checksum = calcChecksum(data)
             stm += pack(">HH", checksum[0],checksum[1])
             stm += pack(">LL", offset, strlen(data))
@@ -1055,7 +1063,7 @@ class TTFontFile:
 
         # Table data
         for tag, data in sorted_tables: 
-            data += "\0\0\0"
+            data += tobytes("\0\0\0")
             stm += substr(data,0,(strlen(data)&~3))
 
         checksum = calcChecksum(stm)
