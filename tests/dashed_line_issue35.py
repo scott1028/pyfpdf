@@ -13,8 +13,10 @@ pdf.dashed_line(10, 30, 110, 30, 1, 10)
 
 fn = 'dashed_line_issue35.pdf'
 pdf.output(fn,'F')
+
 try:
     os.startfile(fn)
 except:
-    os.system("xdg-open %s" % fn)
+    os.system("xdg-open \"%s\"" % fn)
+    
 
