@@ -19,3 +19,4 @@ try:
 except:
     os.system("xdg-open \"%s\"" % fn)
     
+
