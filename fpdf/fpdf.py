@@ -13,6 +13,8 @@
 # * NOTE: 'I' and 'D' destinations are disabled, and simply print to STDOUT  *
 # ****************************************************************************
 
+from __future__ import division
+
 from datetime import datetime
 from functools import wraps
 import math
@@ -177,7 +179,11 @@ class FPDF(object):
         self.page_break_trigger=self.h-margin
 
     def set_display_mode(self, zoom,layout='continuous'):
-        "Set display mode in viewer"
+        """Set display mode in viewer
+        
+        The "zoom" argument may be 'fullpage', 'fullwidth', 'real',
+        'default', or a number, interpreted as a percentage."""
+        
         if(zoom=='fullpage' or zoom=='fullwidth' or zoom=='real' or zoom=='default' or not isinstance(zoom,basestring)):
             self.zoom_mode=zoom
         else:
@@ -397,6 +403,43 @@ class FPDF(object):
         else:
             op='S'
         self._out(sprintf('%.2f %.2f %.2f %.2f re %s',x*self.k,(self.h-y)*self.k,w*self.k,-h*self.k,op))
+
+    @check_page
+    def ellipse(self, x,y,w,h,style=''):
+        "Draw a ellipse"
+        if(style=='F'):
+            op='f'
+        elif(style=='FD' or style=='DF'):
+            op='B'
+        else:
+            op='S'
+
+        cx = x + w/2.0
+        cy = y + h/2.0
+        rx = w/2.0
+        ry = h/2.0
+
+        lx = 4.0/3.0*(math.sqrt(2)-1)*rx
+        ly = 4.0/3.0*(math.sqrt(2)-1)*ry
+
+        self._out(sprintf('%.2f %.2f m %.2f %.2f %.2f %.2f %.2f %.2f c', 
+            (cx+rx)*self.k, (self.h-cy)*self.k, 
+            (cx+rx)*self.k, (self.h-(cy-ly))*self.k, 
+            (cx+lx)*self.k, (self.h-(cy-ry))*self.k, 
+            cx*self.k, (self.h-(cy-ry))*self.k))
+        self._out(sprintf('%.2f %.2f %.2f %.2f %.2f %.2f c', 
+            (cx-lx)*self.k, (self.h-(cy-ry))*self.k, 
+            (cx-rx)*self.k, (self.h-(cy-ly))*self.k, 
+            (cx-rx)*self.k, (self.h-cy)*self.k))
+        self._out(sprintf('%.2f %.2f %.2f %.2f %.2f %.2f c', 
+            (cx-rx)*self.k, (self.h-(cy+ly))*self.k, 
+            (cx-lx)*self.k, (self.h-(cy+ry))*self.k, 
+            cx*self.k, (self.h-(cy+ry))*self.k))
+        self._out(sprintf('%.2f %.2f %.2f %.2f %.2f %.2f c %s', 
+            (cx+lx)*self.k, (self.h-(cy+ry))*self.k, 
+            (cx+rx)*self.k, (self.h-(cy+ly))*self.k, 
+            (cx+rx)*self.k, (self.h-cy)*self.k, 
+            op))
 
     def add_font(self, family, style='', fname='', uni=False):
         "Add a TrueType or Type1 font"
@@ -1572,7 +1615,7 @@ class FPDF(object):
         elif(self.zoom_mode=='real'):
             self._out('/OpenAction [3 0 R /XYZ null null 1]')
         elif(not isinstance(self.zoom_mode,basestring)):
-            self._out('/OpenAction [3 0 R /XYZ null null '+(self.zoom_mode/100)+']')
+            self._out(sprintf('/OpenAction [3 0 R /XYZ null null %s]',self.zoom_mode/100))
         if(self.layout_mode=='single'):
             self._out('/PageLayout /SinglePage')
         elif(self.layout_mode=='continuous'):
@@ -1816,8 +1859,10 @@ class FPDF(object):
                     color += b(data[pos])
                     alpha += b(data[pos])
                     line = substr(data, pos+1, length)
-                    color += re.sub('(.).'.encode("ascii"),lambda m: m.group(1),line, flags=re.DOTALL)
-                    alpha += re.sub('.(.)'.encode("ascii"),lambda m: m.group(1),line, flags=re.DOTALL)
+                    re_c = re.compile('(.).'.encode("ascii"), flags=re.DOTALL)
+                    re_a = re.compile('.(.)'.encode("ascii"), flags=re.DOTALL)
+                    color += re_c.sub(lambda m: m.group(1), line)
+                    alpha += re_a.sub(lambda m: m.group(1), line)
             else:
                 # RGB image
                 length = 4*w
@@ -1826,8 +1871,10 @@ class FPDF(object):
                     color += b(data[pos])
                     alpha += b(data[pos])
                     line = substr(data, pos+1, length)
-                    color += re.sub('(...).'.encode("ascii"),lambda m: m.group(1),line, flags=re.DOTALL)
-                    alpha += re.sub('...(.)'.encode("ascii"),lambda m: m.group(1),line, flags=re.DOTALL)
+                    re_c = re.compile('(...).'.encode("ascii"), flags=re.DOTALL)
+                    re_a = re.compile('...(.)'.encode("ascii"), flags=re.DOTALL)
+                    color += re_c.sub(lambda m: m.group(1), line)
+                    alpha += re_a.sub(lambda m: m.group(1), line)
             del data
             data = zlib.compress(color)
             info['smask'] = zlib.compress(alpha)
