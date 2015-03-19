@@ -4,7 +4,7 @@
 
 #PyFPDF-cover-test:format=PDF
 #PyFPDF-cover-test:fn=ex.pdf
-#PyFPDF-cover-test:hash=f77f71491e1662a732212861a2d87928
+#PyFPDF-cover-test:hash=e3c74fe7738fba7eed0cd489c597dc88
 #PyFPDF-cover-test:res=font/DejaVuSansCondensed.ttf
 #PyFPDF-cover-test:res=HelloWorld.txt
 
@@ -13,6 +13,7 @@ from fpdf import FPDF
 
 import os
 
+@common.add_unittest
 def dotest(outputname, nostamp):
     pdf = FPDF()
     if nostamp:

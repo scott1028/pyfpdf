@@ -6,6 +6,7 @@
 #       3) assert this file in tests/cover folder
 
 import sys, os, subprocess
+import unittest, inspect
 
 PY3K = sys.version_info >= (3, 0)
 
@@ -13,7 +14,7 @@ basepath = os.path.abspath(os.path.join(__file__, "..", ".."))
 
 RESHASH = "38db8db76e80a2e75f94d1df9eda307e"
 
-# if PYFPDFTESTLOCAL is not set - use instaled pyfpdf version
+# if PYFPDFTESTLOCAL is not set - use installed pyfpdf version
 PYFPDFTESTLOCAL = ("PYFPDFTESTLOCAL" in os.environ)
 if PYFPDFTESTLOCAL:
     sys.path = [os.path.join(basepath, "fpdf_local")] + sys.path
@@ -183,26 +184,29 @@ def load_res_file(path):
             items[res][1] += [kv[1].split(",")]
     return items
     
-def check_env(settings, args):
-    "Check test environment"
-    verbose = not args["autotest"]
+def skip_reason(settings):
+    "Check if test should be skipped"
     # check python version
     if PY3K:
         if settings.get("python3", "yes") == "no":
             # python 3 inacceptable
-            if verbose:
-                err("Python 3.x unsupported %s" % repr(sys.version_info))
-            else:
-                log("NOTFORPY3")
-            return False
+            return "Python 3.x unsupported %s" % repr(sys.version_info)
     else:
         if settings.get("python2", "yes") == "no":
             # python 2 inacceptable
-            if verbose:
-                err("Python 2.x unsupported %s" % repr(sys.version_info))
-            else:
-                log("NOTFORPY2")
-            return False
+            return "Python 2.x unsupported %s" % repr(sys.version_info)
+    plat = settings.get("platform", "*")
+    if plat == "":
+        plat = "*"
+    if plat != "*":
+        plats = plat.split(",")
+        accept = False
+        for plat in plats:
+            if sys.platform == plat:
+                accept = True
+                break
+        if not accept:
+            return "not for \"" + sys.platform + "\""
     if settings.get("pil", "no") == "yes":
         # import PIL
         try:
@@ -213,32 +217,34 @@ def check_env(settings, args):
         except ImportError:
             Image = None
         if Image is None:
-            if verbose:
-                err("PIL or Pillow module is required")
-            else:
-                log("NOPIL")
-            return False
-    # check res
+            return "PIL or Pillow module is required"
+    return None
+
+def check_res(settings, verbose):
     reslst = None
     for res in settings.get("res", []):
         if reslst is None:
             # check
             respath = os.path.join(basepath, "resources.txt")
             if file_hash(respath) != RESHASH:
-                if verbose:
-                    err("File resources.txt damaged (hash mismatch)")
-                else:
+                err("File resources.txt damaged (hash mismatch)")
+                if not verbose:
                     log("RESHASH")
                 return False
             # load data
             reslst = load_res_file(respath)
         if res not in reslst:
-            err("Resource \"" + res + "\" not found")
+            err("Resource \"" + res + "\" not in list")
             if not verbose:
                 log("NORES")
             return False
         # check hash
         respath = os.path.join(basepath, res)
+        if not os.path.exists(respath):
+            err("Resource \"" + res + "\" not found")
+            if not verbose:
+                log("NORES")
+            return False
         hs = file_hash(respath)
         if hs != reslst[res][0]:
             err("Resource \"" + res + "\" damaged")
@@ -268,17 +274,53 @@ def check_result(settings, args):
             log("OK")
         else:
             log("HASHERROR")
+        return check
     else:
         if settings.get("fn"):        
             start_by_ext(args["fn"])
         else:
             log("Test passed")
 
+def add_unittest(testfunc):
+    """Decorator to add "unittest" test case class"""
+    
+    class Test(unittest.TestCase):
+        def setUp(self):
+            self.assertTrue(check_res(self.settings, verbose=True))
+        
+        def runTest(self):
+            outputname = self.settings.get("fn")
+            testfunc(outputname, nostamp=True)
+            args = {"check": True, "autotest": True, "fn": outputname}
+            self.assertTrue(check_result(self.settings, args))
+    
+    name = testfunc.__name__ + "_unittest"
+    Test.__name__ = name
+    Test.__module__ = testfunc.__module__
+    
+    Test.settings = read_cover_info(inspect.getsourcefile(testfunc))
+    reason = skip_reason(Test.settings)
+    if reason is not None and sys.version_info >= (2, 7):
+        Test = unittest.skip(reason)(Test)  # No skip() in Python 2.6
+    
+    setattr(inspect.getmodule(testfunc), name, Test)
+    return testfunc
+
 def testmain(fn, testfunc):
     si = read_cover_info(fn)
     da = parse_test_args(sys.argv, si.get("fn"))
-    if not check_env(si, da):
+    
+    verbose = not da["autotest"]
+    reason = skip_reason(si)
+    if reason is not None:
+        if verbose:
+            err(reason)
+        else:
+            log("SKIP")
         return
+    if not check_res(si, verbose=verbose):
+        return
+    
     testfunc(da["fn"], da["autotest"] or da["check"])
     check_result(si, da)
 
