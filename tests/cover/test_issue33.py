@@ -59,6 +59,7 @@ def genbar():
     return bar
 
 
+@common.add_unittest
 def dotest(outputname, nostamp):
     plane = genbar()
     palette = (0,0,0, 255,255,255) + (128,128,128)*254
@@ -102,12 +103,7 @@ def dotest(outputname, nostamp):
     os.unlink(gif2)
     
 def main():
-    si = common.read_cover_info(__file__)
-    da = common.parse_test_args(sys.argv, si["fn"])
-    if not common.check_env(si, da):
-        return
-    dotest(da["fn"], da["autotest"] or da["check"])
-    common.check_result(si, da)
+    return common.testmain(__file__, dotest)
     
 if __name__ == "__main__":
     main()
